@@ -1,0 +1,38 @@
+# Data — large video files, not tracked
+data/
+
+# Model weights
+*.pt
+*.onnx
+*.pth
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Features / extracted data
+features/tricks/cache/
+features/tricks/X.npy
+features/tricks/y.npy
+
+# Output files
+output.mp4
+*.csv
+highlights/
+
+# Session databases
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

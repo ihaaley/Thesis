@@ -1,0 +1,21 @@
+{
+  "BacksideNoComply180PopShuvit": 0,
+  "Caveman": 1,
+  "Caveman_diagonal": 2,
+  "Frontside180BodyVarial": 3,
+  "Frontside180Step": 4,
+  "FrontsideNoComply180": 5,
+  "Ghostride": 6,
+  "HippieJump": 7,
+  "Manual": 8,
+  "NoComplyUnderflip": 9,
+  "NollieFrontside180Pivot": 10,
+  "NollieFrontside180Shuvit": 11,
+  "NollieNoseManual": 12,
+  "ccwTigerclawBV": 13,
+  "cwTigerclaw": 14,
+  "fcw2Step540Aerograb": 15,
+  "fcw2Step540Aeroslam": 16,
+  "ncwPivot": 17,
+  "ncwShuvit": 18
+}
