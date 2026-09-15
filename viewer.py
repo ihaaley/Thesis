@@ -605,7 +605,12 @@ class InferenceWorker(QThread):
                                pst["ankle_history"][0])
                     pst["speed_kmh"] = disp * SPEED_PX_TO_KMH
 
-                now_t = time.time()
+                # Zeitbasis: bei einer Videodatei zaehlt die Zeit IM Video.
+                # Die Verarbeitung laeuft langsamer als Echtzeit, mit der
+                # Uhrzeit des Rechners waeren alle Dauern entsprechend zu gross.
+                # Im Kamerabetrieb bleibt die Uhrzeit richtig.
+                now_t = (time.time() if isinstance(self.source, int)
+                         else frame_idx / max(fps, 1))
                 h_px = h_pct = max_h_pct = 0
                 airtime_s = 0.0
                 airborne = False

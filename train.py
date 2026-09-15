@@ -31,6 +31,7 @@ Ergebnisse (landen in <features>/)
 """
 
 import argparse
+import sys
 import json
 import os
 from pathlib import Path
@@ -110,6 +111,55 @@ def stratified_split(X, y, val_ratio=0.15, test_ratio=0.15):
         test_idx .extend(idxs[:n_test])                      # erste Scheibe → Test
         val_idx  .extend(idxs[n_test:n_test + n_val])        # zweite Scheibe → Validierung
         train_idx.extend(idxs[n_test + n_val:])              # Rest → Training
+
+    return (np.array(train_idx, dtype=int),
+            np.array(val_idx,   dtype=int),
+            np.array(test_idx,  dtype=int))
+
+
+def clipwise_split(y, clips, val_ratio=0.15, test_ratio=0.15):
+    """Teilt auf Ebene der VIDEOS auf, nicht auf Ebene der Fenster.
+
+    WARUM?
+    Benachbarte Fenster desselben Videos überlappen bei Fenstergröße 30 und
+    Schrittweite 15 zur Hälfte – sie bestehen also zu 50 % aus denselben
+    Bildern. Werden die Fenster zufällig aufgeteilt, landen solche fast
+    identischen Fenster gleichzeitig im Training und im Test. Das Modell
+    bekommt im Test dann Material zu sehen, das es bereits kennt, und die
+    gemessene Genauigkeit fällt zu günstig aus.
+
+    Hier werden stattdessen ganze Videos einer Teilmenge zugewiesen. Die
+    Klassenverhältnisse bleiben dabei erhalten, weil jede Klasse einzeln
+    aufgeteilt wird.
+    """
+    from collections import defaultdict
+
+    # Fensterpositionen je Klasse und je Video sammeln
+    je_klasse = defaultdict(lambda: defaultdict(list))
+    for i, (label, clip) in enumerate(zip(y, clips)):
+        je_klasse[int(label)][str(clip)].append(i)
+
+    train_idx, val_idx, test_idx = [], [], []
+    for cls, videos in je_klasse.items():
+        clip_ids = list(videos.keys())
+        np.random.shuffle(clip_ids)
+
+        gesamt    = sum(len(v) for v in videos.values())
+        ziel_test = gesamt * test_ratio
+        ziel_val  = gesamt * val_ratio
+        im_test = im_val = 0
+
+        for n, cid in enumerate(clip_ids):
+            positionen = videos[cid]
+            # Das letzte Video einer Klasse geht immer ins Training – so bleibt
+            # keine Klasse ohne Trainingsbeispiele, auch bei sehr wenigen Videos.
+            rest = len(clip_ids) - n
+            if im_test < ziel_test and rest > 2:
+                test_idx.extend(positionen);  im_test += len(positionen)
+            elif im_val < ziel_val and rest > 1:
+                val_idx.extend(positionen);   im_val  += len(positionen)
+            else:
+                train_idx.extend(positionen)
 
     return (np.array(train_idx, dtype=int),
             np.array(val_idx,   dtype=int),
@@ -243,6 +293,16 @@ def main():
     )
     parser.add_argument("--features",    type=str, default="features",
                         help="Directory containing X.npy, y.npy, label_map.json")
+    # Wie wird in Training / Validierung / Test aufgeteilt?
+    #   window = wie bisher: einzelne Fenster werden zufaellig verteilt
+    #   clip   = ganze Videos werden einer Teilmenge zugewiesen
+    # Bei "window" koennen ueberlappende Fenster desselben Videos gleichzeitig
+    # im Training und im Test landen, was die Testgenauigkeit zu guenstig macht.
+    parser.add_argument("--split-by",    type=str,   default="window",
+                        choices=["window", "clip"],
+                        help="window: Fenster zufaellig verteilen (bisheriges Verhalten). "
+                             "clip: ganze Videos einer Teilmenge zuweisen, "
+                             "verlangt clips.npy")
     # Epoche = ein kompletter Durchlauf durch alle Trainingsdaten
     parser.add_argument("--epochs",      type=int,   default=80)
     # Batch = wie viele Beispiele gleichzeitig verarbeitet werden
@@ -272,7 +332,21 @@ def main():
     class_names     = [idx_to_label[i] for i in range(len(label_map))]  # in Indexreihenfolge
     num_classes     = len(class_names)
 
-    train_idx, val_idx, test_idx = stratified_split(X, y)
+    if args.split_by == "clip":
+        clips_datei = features_dir / "clips.npy"
+        if not clips_datei.exists():
+            sys.exit("[FEHLER] --split-by clip verlangt clips.npy im Merkmalsverzeichnis.\n"
+                     "         Diese Datei erzeugt extract_features_manifest.py.")
+        clips = np.load(clips_datei, allow_pickle=True)
+        if len(clips) != len(y):
+            sys.exit(f"[FEHLER] clips.npy ({len(clips)}) passt nicht zu y.npy ({len(y)}).")
+        train_idx, val_idx, test_idx = clipwise_split(y, clips)
+        n_clips = len(set(clips.tolist()))
+        print(f"[INFO] Aufteilung clipweise über {n_clips} Videos")
+    else:
+        train_idx, val_idx, test_idx = stratified_split(X, y)
+        print("[INFO] Aufteilung fensterweise (überlappende Fenster können "
+              "auf Training und Test verteilt werden)")
     print(f"[INFO] Split → train:{len(train_idx)}  val:{len(val_idx)}  test:{len(test_idx)}")
 
     def make_loader(idx, shuffle=True):

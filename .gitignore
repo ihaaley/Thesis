@@ -1,5 +1,7 @@
 # Data — large video files, not tracked
 data/
+# Ausnahme: Manifeste sind kleine Textlisten, keine Daten
+!data/manifest_*.csv
 
 # Model weights
 *.pt
@@ -23,6 +25,9 @@ features/tricks/y.npy
 
 # Output files
 output.mp4
+# Videos generell nicht ins Repository
+*.mp4
+*.mov
 *.csv
 highlights/
 

@@ -82,6 +82,27 @@ KP_CONF_THRESH = 0.40   # Mindestsicherheit, um ein Gelenk zu zeichnen/zu nutzen
 # Fensterbreite für den gleitenden Mittelwert der Boardhöhe (in Bildern)
 HEIGHT_SMOOTH_N = 7
 AIRBORNE_THRESH = 12     # ab so vielen Pixeln über dem Boden gilt: in der Luft
+
+# ── Zeitbasis für alle Dauermessungen ────────────────────────────────────────
+# Bei einer Videodatei zählt die Zeit IM VIDEO, nicht die Uhrzeit des Rechners.
+# Wird ein Video langsamer als in Echtzeit verarbeitet — bei hoher Auflösung
+# sind ein bis drei Bilder pro Sekunde normal — dann wären mit time.time()
+# gemessene Dauern um genau diesen Faktor zu groß. Eine Flugphase von einer
+# halben Sekunde erschiene dann als eine halbe Minute.
+# Im Kamerabetrieb bleibt die Uhrzeit des Rechners richtig; dort ist die
+# Videouhr None und jetzt() fällt automatisch darauf zurück.
+_video_uhr = None
+
+
+def setze_video_uhr(sekunden):
+    """Setzt die Position im Video (in Sekunden). None = Kamerabetrieb."""
+    global _video_uhr
+    _video_uhr = sekunden
+
+
+def jetzt():
+    """Aktuelle Zeit: Videozeit bei Dateien, sonst Uhrzeit des Rechners."""
+    return time.time() if _video_uhr is None else _video_uhr
 # grober Umrechnungsfaktor Pixel/Bild → km/h (je Kamera neu einzustellen)
 SPEED_PX_TO_KMH = 0.05
 TRICK_OLLIE_MIN_H = 20  # Mindesthöhe in Pixeln, um von einem Ollie zu sprechen
@@ -765,7 +786,7 @@ def draw_top_right_player_panels(frame, player_data_list, skate_assignment,
         h_px = h_pct = max_h_pct = 0
         airborne = False
         skate_status = None
-        now = time.time()
+        now = jetzt()
         airtime_s = 0.0
 
         # Der gesamte folgende Block läuft nur, wenn dieser Person ein Board
@@ -892,7 +913,7 @@ def draw_top_right_player_panels(frame, player_data_list, skate_assignment,
         speed_text = f"{st['speed_kmh']:.1f} km/h"
 
         # Flugzeit / Höhe (nur mit zugeordnetem Board)
-        now = time.time()
+        now = jetzt()
         airtime_s = 0.0
         h_pct = 0.0
         max_air = st.get("max_airtime", 0.0)
@@ -1398,6 +1419,10 @@ def process_video(source, model_size="s", conf_thresh=0.25, iou_thresh=0.45,
             frame_idx += 1
             fps_counter += 1
 
+            # Zeitbasis für Flugzeitmessung: bei Dateien die Videozeit
+            setze_video_uhr(None if isinstance(source, int)
+                            else frame_idx / max(fps, 1))
+
             # ── Posenverfolgung ──
             # .track() vergibt stabile IDs über die Bilder hinweg;
             # persist=True behält die Zuordnung von Bild zu Bild bei.
@@ -1619,7 +1644,7 @@ def process_video(source, model_size="s", conf_thresh=0.25, iou_thresh=0.45,
                 st = player_state.get(tid, {})
                 # Flugzeit aufsummieren
                 if st.get("phase") == "air" and st.get("airborne_start"):
-                    _air_now = time.time() - st["airborne_start"]
+                    _air_now = jetzt() - st["airborne_start"]
                     global_stats["total_airtime"] = (
                         global_stats.get("total_airtime", 0.0) + 1.0 / max(fps_display, 1))
                     global_stats["max_airtime"] = max(
@@ -1695,7 +1720,7 @@ def process_video(source, model_size="s", conf_thresh=0.25, iou_thresh=0.45,
                     h_pct = (h_px / height * 100) if height > 0 else 0
                     airt = 0.0
                     if st.get("airborne_start"):
-                        airt = time.time() - st["airborne_start"]
+                        airt = jetzt() - st["airborne_start"]
                     # Felder ohne gültigen Wert bleiben leer ("") statt 0 —
                     # so lässt sich später "nicht gemessen" von "null" trennen.
                     csv_writer.writerow([
